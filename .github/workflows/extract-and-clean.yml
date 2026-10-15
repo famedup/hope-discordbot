@@ -1,0 +1,79 @@
+name: Extract archive and clean workflows
+
+on:
+  workflow_dispatch:
+    inputs:
+      archive_path:
+        description: 'Optional archive path, like "archive.tar.gz" or "archives/*.tar.gz"'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  extract-and-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Extract archive and remove workflows
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          ARCHIVE_INPUT="${{ github.event.inputs.archive_path }}"
+
+          files=()
+          if [ -n "$ARCHIVE_INPUT" ]; then
+            for f in $ARCHIVE_INPUT; do
+              [ -f "$f" ] || continue
+              files+=("$f")
+            done
+          fi
+
+          if [ ${#files[@]} -eq 0 ]; then
+            for f in ./*.tar.gz ./archives/*.tar.gz ./**/*.tar.gz; do
+              [ -f "$f" ] || continue
+              files+=("$f")
+            done
+          fi
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No .tar.gz found"
+            exit 0
+          fi
+
+          echo "Archives found: ${files[*]}"
+
+          for f in "${files[@]}"; do
+            echo "Extracting $f"
+            tmpdir=".tmp_extract_$(basename "$f" .tar.gz)"
+            rm -rf "$tmpdir"
+            mkdir -p "$tmpdir"
+            tar -xzf "$f" -C "$tmpdir"
+
+            rsync -a --exclude='.git' "$tmpdir"/ ./
+            rm -rf "$tmpdir"
+            rm -f "$f"
+          done
+
+          if [ -d ".github/workflows" ]; then
+            find .github/workflows -type f \( -name "*.yml" -o -name "*.yaml" \) -print0 | xargs -0 -r rm -f
+            if [ -z "$(ls -A .github/workflows 2>/dev/null || true)" ]; then
+              rmdir .github/workflows || true
+            fi
+          fi
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Extract archive and remove workflows [skip ci]"
+          git push
