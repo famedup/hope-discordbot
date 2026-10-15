@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# secrets — never commit these
+.env
+.env.*
+!.env.example
+
+# runtime output
+src/logs/
+src/.command_hash
+src/temp/
+src/tmp/
+tempassets/
+*.log
+npm-debug.log*
+
+# archives & backups
+*.zip
+*.tar
+*.tar.gz
+*.bak
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
